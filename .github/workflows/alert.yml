@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "1,16,31,46 * * * *"   # หลังแท่ง 15 นาทีปิด 1 นาที (GitHub อาจช้ากว่านี้หลายนาที)
   workflow_dispatch:               # กดรันเองได้จากแท็บ Actions
+    inputs:
+      test_line:
+        description: "ส่งข้อความทดสอบเข้า LINE ด้วย"
+        type: boolean
+        default: false
 
 concurrency:
   group: btc-alert
@@ -22,6 +27,14 @@ jobs:
           path: state.json
           key: state-${{ github.run_id }}
           restore-keys: state-
+
+      - name: Test LINE
+        if: ${{ inputs.test_line }}
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          PYTHONIOENCODING: utf-8
+        run: python3 line_notify.py
 
       - name: Check signals
         env:
