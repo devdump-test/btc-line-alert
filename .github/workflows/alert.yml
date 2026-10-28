@@ -1,0 +1,37 @@
+name: BTC alert
+
+on:
+  schedule:
+    - cron: "1,16,31,46 * * * *"   # หลังแท่ง 15 นาทีปิด 1 นาที (GitHub อาจช้ากว่านี้หลายนาที)
+  workflow_dispatch:               # กดรันเองได้จากแท็บ Actions
+
+concurrency:
+  group: btc-alert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # จำแท่งล่าสุดที่เช็คแล้วข้ามรอบ เพื่อไม่ให้แจ้งซ้ำ
+      - uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: state-${{ github.run_id }}
+          restore-keys: state-
+
+      - name: Check signals
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          PYTHONIOENCODING: utf-8
+        run: python3 run.py
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: state.json
+          key: state-${{ github.run_id }}

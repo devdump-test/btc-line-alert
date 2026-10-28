@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC EMA Backtest</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { --bg:#131722; --panel:#1e222d; --text:#d1d4dc; --muted:#787b86; --line:#2a2e39; --up:#26a69a; --down:#ef5350; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, "Segoe UI", Tahoma, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 4px; }
+  .sub { color:var(--muted); font-size:14px; margin-bottom:16px; }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px; min-width:120px; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-bottom:18px; overflow:hidden; }
+  .head { display:flex; flex-wrap:wrap; gap:6px 16px; padding:10px 14px; font-size:14px; border-bottom:1px solid var(--line); }
+  .head .n { color:var(--muted); }
+  .tag { padding:1px 8px; border-radius:10px; font-size:12px; background:#2a2e39; }
+  .win { background:rgba(38,166,154,.2); color:#4dd0c1; }
+  .loss { background:rgba(239,83,80,.2); color:#ff7a77; }
+  .chart { height:380px; }
+  .legend { font-size:12px; color:var(--muted); padding:6px 14px 10px; }
+  .legend i { display:inline-block; width:14px; height:3px; vertical-align:middle; margin:0 4px 0 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ย้อนเทสต์ BTC/USDT 15m: EMA100 / EMA200</h1>
+  <div class="sub" id="range"></div>
+  <div class="stats" id="stats"></div>
+  <div id="list"></div>
+</main>
+<script>
+const DATA = __DATA__;
+const s = DATA.summary;
+document.getElementById('range').textContent = 'ช่วงข้อมูล ' + s.range + ' (เวลาไทย)';
+const rows = DATA.rows;
+const cnt = f => rows.filter(f).length;
+const stats = [
+  [s.breakouts, 'ทะลุ EMA200'], [cnt(r => r.side === 'long'), 'เข้า Long'], [cnt(r => r.side === 'short'), 'เข้า Short'], [s.cancels, 'ยกเลิก'],
+  [cnt(r => r.r1) + '/' + rows.length, 'ถึง 1R'], [cnt(r => r.r2) + '/' + rows.length, 'ถึง 2R'],
+];
+document.getElementById('stats').innerHTML = stats.map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+
+const LEVEL_COLOR = { top: '#ffffff', mid: '#b0b0b0', bottom: '#808080' };
+const list = document.getElementById('list');
+rows.forEach((r, idx) => {
+  const cls = r.result === 'โดนตัด' ? 'loss' : (r.r1 ? 'win' : '');
+  const card = document.createElement('div');
+  card.className = 'card';
+  const isLong = r.side === 'long';
+  card.innerHTML = `<div class="head"><span class="n">#${idx + 1}</span>
+    <span class="tag ${isLong ? 'win' : 'loss'}">${isLong ? 'Long' : 'Short'}</span><b>${r.time}</b>
+    <span>เข้า ${r.price.toLocaleString(undefined, {maximumFractionDigits: 1})}</span>
+    <span>ยืน${r.holding}</span><span>เสี่ยงถึง${isLong ? 'เส้นล่าง' : 'เส้นบน'} ${r.risk_pct.toFixed(2)}%</span>
+    <span>ไปทางกำไรสูงสุด 24 ชม. ${r.mfe_pct.toFixed(2)}%</span><span class="tag ${cls}">${r.result}</span></div>
+    <div class="chart"></div>
+    <div class="legend"><i style="background:#f5c542"></i>EMA200<i style="background:#fff"></i>EMA100<i style="background:#fff;height:1px"></i>เส้นบน / กลาง / ล่าง (ประ)</div>`;
+  list.appendChild(card);
+  const el = card.querySelector('.chart');
+  const chart = LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
+    grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+    timeScale: { timeVisible: true, secondsVisible: false },
+    rightPriceScale: { borderColor: '#2a2e39' },
+  });
+  const cs = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+    wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
+  cs.setData(r.chart.candles);
+  chart.addLineSeries({ color: '#f5c542', lineWidth: 2, priceLineVisible: false, lastValueVisible: false }).setData(r.chart.ema200);
+  chart.addLineSeries({ color: '#ffffff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false }).setData(r.chart.ema100);
+  for (const [k, v] of Object.entries(r.chart.levels)) {
+    cs.createPriceLine({ price: v, color: LEVEL_COLOR[k], lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: r.chart.level_names[k] });
+  }
+  cs.setMarkers(r.chart.markers);
+  chart.timeScale().fitContent();
+});
+if (!rows.length) list.innerHTML = '<p>ไม่พบสัญญาณในช่วงนี้</p>';
+</script>
+</body>
+</html>
